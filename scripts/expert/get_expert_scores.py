@@ -31,15 +31,16 @@ def eval_expert(rank, args, model, dataset):
     try:
         print(f"Rank {rank} starting expert evaluation...", flush=True)
         tokenizer = AutoTokenizer.from_pretrained(args.base_model_path)
-        visible_devices = list(range(rank * args.gpus_per_rank, (rank + 1) * args.gpus_per_rank))
+        # visible_devices = list(range(rank * args.gpus_per_rank, (rank + 1) * args.gpus_per_rank))
+        visible_devices = [0,1]
         device_map = infer_auto_device_map(model, [14, 13], visible_devices)
         model = dispatch_model(model, device_map)
         model.config.expert_log_dir = os.path.join(args.output_dir, f"rank_{rank}")
         n_sample_tokens = args.n_sample_tokens // args.world_size
         os.makedirs(os.path.join(args.output_dir, f"rank_{rank}"), exist_ok=True)
         done_tokens = 0
-        cur_dataset = dataset[rank::args.world_size]
-        for instance in cur_dataset:
+        # cur_dataset = dataset[rank::args.world_size]
+        for instance in dataset:
             input_ids, target_ids = get_formatted_input_and_target(instance['messages'], tokenizer, -100)
             model(input_ids=torch.tensor(input_ids).unsqueeze(0), labels=torch.tensor(target_ids).unsqueeze(0))
             done_tokens += len(input_ids)
@@ -71,8 +72,10 @@ if __name__ == "__main__":
 
     print(f"Running expert evaluation on {args.eval_dataset}...")
     dataset = [json.loads(i) for i in open(f"datasets/train/{args.eval_dataset}.jsonl").readlines()]
+    dataset = dataset[:4]
     random.shuffle(dataset)
 
 
     print("Start Evaluating...")
-    mp.spawn(eval_expert, args=(args, model, dataset), nprocs=args.world_size, join=True)
+    # mp.spawn(eval_expert, args=(args, model, dataset), nprocs=args.world_size, join=True)
+    eval_expert(rank=0, args=args, model=model, dataset=dataset)
